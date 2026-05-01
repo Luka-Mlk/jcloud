@@ -13,6 +13,9 @@ import java.util.UUID;
 public class FileResponse {
     private UUID id;
 
+    @JsonProperty("user_id")
+    private UUID userId;
+
     @JsonProperty("original_filename")
     private String originalFilename;
 

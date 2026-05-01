@@ -17,6 +17,8 @@ public class FileMetadata {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    private UUID userId;
+
     private String originalFilename;
 
     private String contentType;
