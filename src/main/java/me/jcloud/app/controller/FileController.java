@@ -1,6 +1,7 @@
 package me.jcloud.app.controller;
 
 import me.jcloud.app.dto.FileResponse;
+import me.jcloud.app.exception.ResourceNotFoundException;
 import me.jcloud.app.model.FileMetadata;
 import me.jcloud.app.repository.FileMetadataRepository;
 import me.jcloud.app.service.StorageService;
@@ -64,7 +65,7 @@ public class FileController {
             @RequestAttribute("authenticatedUserId") UUID userId) {
 
         FileMetadata metadata = repository.findByIdAndUserId(id, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new ResourceNotFoundException("File not found with id: " + id));
 
         Resource file = storageService.loadAsResource(id);
 
@@ -88,7 +89,7 @@ public class FileController {
             @RequestAttribute("authenticatedUserId") UUID userId) {
 
         FileMetadata metadata = repository.findByIdAndUserId(id, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new ResourceNotFoundException("File not found with id: " + id));
 
         try {
             storageService.deleteFile(id);

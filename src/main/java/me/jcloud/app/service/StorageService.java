@@ -1,5 +1,7 @@
 package me.jcloud.app.service;
 
+import me.jcloud.app.exception.ResourceNotFoundException;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -33,7 +35,7 @@ public class StorageService {
             if (resource.exists() || resource.isReadable()) {
                 return resource;
             } else {
-                throw new RuntimeException("Could not read file: " + fileId);
+                throw new ResourceNotFoundException("Could not read file: " + fileId);
             }
         } catch (MalformedURLException e) {
             throw new RuntimeException("Error: " + e.getMessage());

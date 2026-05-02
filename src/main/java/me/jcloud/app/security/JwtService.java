@@ -1,7 +1,9 @@
 package me.jcloud.app.security;
 
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import me.jcloud.app.exception.UnauthorizedException;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -28,12 +30,13 @@ public class JwtService {
                 .parseSignedClaims(token).getPayload().getSubject();
     }
 
-    public boolean isTokenValid(String token) {
+    public void validateToken(String token) {
         try {
             Jwts.parser().verifyWith(key).build().parseSignedClaims(token);
-            return true;
+        } catch (ExpiredJwtException e) {
+            throw new UnauthorizedException("Token has expired");
         } catch (Exception e) {
-            return false;
+            throw new UnauthorizedException("Invalid token");
         }
     }
 }

@@ -1,13 +1,13 @@
 package me.jcloud.app.service;
 
+import me.jcloud.app.exception.ConflictException;
+import me.jcloud.app.exception.UnauthorizedException;
 import me.jcloud.app.model.Role;
 import me.jcloud.app.model.User;
 import me.jcloud.app.repository.RoleRepository;
 import me.jcloud.app.repository.UserRepository;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -25,10 +25,10 @@ public class UserServiceImpl implements UserService {
     @Override
     public User registerUser(String username, String email, String password) {
         if (userRepository.findByUsername(username).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Username is already taken");
+            throw new ConflictException("Username is already taken");
         }
         if (userRepository.findByEmail(email).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
+            throw new ConflictException("Email is already registered");
         }
 
         Role role = roleRepository.findByName("USER")
@@ -50,10 +50,10 @@ public class UserServiceImpl implements UserService {
     @Override
     public User authenticate(String email, String password) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
+                .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
 
         if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+            throw new UnauthorizedException("Invalid email or password");
         }
 
         return user;
