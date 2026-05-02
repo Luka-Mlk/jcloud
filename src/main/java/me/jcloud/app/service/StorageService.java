@@ -18,13 +18,13 @@ public class StorageService {
     @Value("${storage.location:./data/storage}")
     private String storageLocation;
 
-    public void saveFile(UUID fileId, InputStream inputStream) throws IOException {
+    public long saveFile(UUID fileId, InputStream inputStream) throws IOException {
         Path root = Paths.get(storageLocation);
         if (!Files.exists(root)) {
             Files.createDirectories(root);
         }
 
-        Files.copy(inputStream, root.resolve(fileId.toString()), StandardCopyOption.REPLACE_EXISTING);
+        return Files.copy(inputStream, root.resolve(fileId.toString()), StandardCopyOption.REPLACE_EXISTING);
     }
 
     public Resource loadAsResource(UUID fileId) {

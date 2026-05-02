@@ -1,10 +1,14 @@
 package me.jcloud.app.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import me.jcloud.app.dto.FileResponse;
 import me.jcloud.app.exception.ResourceNotFoundException;
 import me.jcloud.app.model.FileMetadata;
 import me.jcloud.app.repository.FileMetadataRepository;
 import me.jcloud.app.service.StorageService;
+import org.apache.commons.fileupload2.core.FileItemInput;
+import org.apache.commons.fileupload2.core.FileItemInputIterator;
+import org.apache.commons.fileupload2.jakarta.servlet6.JakartaServletFileUpload;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -15,10 +19,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
@@ -37,26 +41,42 @@ public class FileController {
 
     @PostMapping
     public FileResponse upload(
-            @RequestParam("file") MultipartFile file,
+            HttpServletRequest request,
             @RequestAttribute("authenticatedUserId") UUID userId) throws IOException {
 
-        FileMetadata metadata = new FileMetadata();
-        metadata.setUserId(userId);
-        metadata.setOriginalFilename(file.getOriginalFilename());
-        metadata.setFileSize(file.getSize());
-        metadata.setContentType(file.getContentType());
-        metadata.setUploadedAt(OffsetDateTime.now(ZoneOffset.UTC));
-
-        FileMetadata saved = repository.save(metadata);
-
-        try {
-            storageService.saveFile(saved.getId(), file.getInputStream());
-        } catch (IOException e) {
-            repository.delete(saved);
-            throw e;
+        if (!JakartaServletFileUpload.isMultipartContent(request)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Multipart request expected");
         }
 
-        return mapToResponse(saved);
+        JakartaServletFileUpload upload = new JakartaServletFileUpload();
+        FileItemInputIterator iter = upload.getItemIterator(request);
+
+        while (iter.hasNext()) {
+            FileItemInput item = iter.next();
+            if (!item.isFormField()) {
+                // Found a file part
+                FileMetadata metadata = new FileMetadata();
+                metadata.setUserId(userId);
+                metadata.setOriginalFilename(item.getName());
+                metadata.setContentType(item.getContentType());
+                metadata.setUploadedAt(OffsetDateTime.now(ZoneOffset.UTC));
+                metadata.setFileSize(0L); // Will update after saving
+
+                FileMetadata saved = repository.save(metadata);
+
+                try (InputStream inputStream = item.getInputStream()) {
+                    long size = storageService.saveFile(saved.getId(), inputStream);
+                    saved.setFileSize(size);
+                    repository.save(saved);
+                    return mapToResponse(saved);
+                } catch (IOException e) {
+                    repository.delete(saved);
+                    throw e;
+                }
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No file found in request");
     }
 
     @GetMapping("/{id}")
@@ -71,6 +91,7 @@ public class FileController {
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(metadata.getContentType()))
+                .contentLength(metadata.getFileSize())
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + metadata.getOriginalFilename() + "\"")
                 .body(file);
