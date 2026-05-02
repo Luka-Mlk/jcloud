@@ -2,22 +2,29 @@ package me.jcloud.app.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Data
 @Builder
-@JsonPropertyOrder({ "id", "original_filename", "content_type", "file_size", "uploaded_at" })
-public class FileResponse {
+@NoArgsConstructor
+@AllArgsConstructor
+@JsonPropertyOrder({ "id", "bucket_name", "path", "content_type", "file_size", "uploaded_at" })
+public class ObjectResponse {
     private UUID id;
 
     @JsonProperty("user_id")
     private UUID userId;
 
-    @JsonProperty("original_filename")
-    private String originalFilename;
+    @JsonProperty("bucket_name")
+    private String bucketName;
+
+    @JsonProperty("path")
+    private String path;
 
     @JsonProperty("content_type")
     private String contentType;

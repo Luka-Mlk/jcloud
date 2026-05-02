@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class UploadInitRequest {
     @NotBlank
-    private String filename;
+    private String path;
     @NotBlank
     private String contentType;
 }

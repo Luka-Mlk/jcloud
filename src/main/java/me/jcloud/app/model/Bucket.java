@@ -11,27 +11,20 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class UploadSession {
+@Table(name = "buckets", uniqueConstraints = {
+    @UniqueConstraint(columnNames = "name")
+})
+public class Bucket {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(nullable = false)
-    private UUID userId;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "bucket_id", nullable = false)
-    private Bucket bucket;
+    private String name;
 
     @Column(nullable = false)
-    private String path;
-
-    @Column(nullable = false)
-    private String contentType;
-
-    @Column(nullable = false)
-    private String status; // IN_PROGRESS, COMPLETED, ABORTED
+    private UUID ownerId;
 
     @Column(nullable = false)
     private OffsetDateTime createdAt;

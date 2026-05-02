@@ -10,7 +10,12 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-@JsonPropertyOrder({ "id", "originalFilename", "contentType", "fileSize", "uploadedAt" })
+@AllArgsConstructor
+@Builder
+@JsonPropertyOrder({ "id", "bucketId", "path", "contentType", "fileSize", "uploadedAt" })
+@Table(name = "file_metadata", uniqueConstraints = {
+    @UniqueConstraint(columnNames = {"bucket_id", "path"})
+})
 public class FileMetadata {
 
     @Id
@@ -19,7 +24,12 @@ public class FileMetadata {
 
     private UUID userId;
 
-    private String originalFilename;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "bucket_id", nullable = false)
+    private Bucket bucket;
+
+    @Column(nullable = false)
+    private String path;
 
     private String contentType;
 
@@ -27,4 +37,8 @@ public class FileMetadata {
 
     @Column(nullable = false)
     private OffsetDateTime uploadedAt;
+
+    public UUID getBucketId() {
+        return bucket != null ? bucket.getId() : null;
+    }
 }
