@@ -30,6 +30,7 @@ package me.jcloud.app.security;
          if (authHeader != null && authHeader.startsWith("Bearer ")) {
              String jwt = authHeader.substring(7);
              if (jwtService.isTokenValid(jwt) && sessionService.isSessionActive(jwt)) {
+                 sessionService.refreshSession(jwt, TokenSessionService.SESSION_TTL);
                  String userId = jwtService.extractUserId(jwt);
                  request.setAttribute("authenticatedUserId", UUID.fromString(userId));
  

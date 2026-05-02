@@ -35,7 +35,7 @@ public class AuthController {
         );
         
         String token = jwtService.createToken(user.getId());
-        sessionService.activateSession(token, user.getId(), 3600);
+        sessionService.activateSession(token, user.getId(), TokenSessionService.SESSION_TTL);
         return Map.of("token", token);
     }
 
@@ -47,7 +47,7 @@ public class AuthController {
         );
         
         String token = jwtService.createToken(user.getId());
-        sessionService.activateSession(token, user.getId(), 3600);
+        sessionService.activateSession(token, user.getId(), TokenSessionService.SESSION_TTL);
 
         return Map.of("token", token);
     }

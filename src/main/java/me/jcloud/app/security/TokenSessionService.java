@@ -8,6 +8,7 @@ import java.util.UUID;
 
 @Service
 public class TokenSessionService {
+    public static final long SESSION_TTL = 3600;
     private final StringRedisTemplate redisTemplate;
 
     public TokenSessionService(StringRedisTemplate redisTemplate) {
@@ -20,6 +21,10 @@ public class TokenSessionService {
 
     public boolean isSessionActive(String token) {
         return Boolean.TRUE.equals(redisTemplate.hasKey(token));
+    }
+
+    public void refreshSession(String token, long ttlSeconds) {
+        redisTemplate.expire(token, Duration.ofSeconds(ttlSeconds));
     }
 
     public void revokeSession(String token) {
