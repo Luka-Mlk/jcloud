@@ -4,6 +4,7 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import me.jcloud.app.exception.UnauthorizedException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -13,14 +14,20 @@ import java.util.UUID;
 
 @Service
 public class JwtService {
-    private static final String SECRET = "my-super-secret-key-that-is-very-long-for-jwt";
-    private final SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+    private final SecretKey key;
+    private final long expirationMs;
+
+    public JwtService(@Value("${jcloud.jwt.secret}") String secret,
+                      @Value("${jcloud.jwt.expiration-ms}") long expirationMs) {
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.expirationMs = expirationMs;
+    }
 
     public String createToken(UUID userId) {
         return Jwts.builder()
                 .subject(userId.toString())
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + 3600000)) // 1 hour
+                .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(key)
                 .compact();
     }

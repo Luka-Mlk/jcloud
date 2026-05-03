@@ -1,5 +1,6 @@
 package me.jcloud.app.security;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -8,11 +9,17 @@ import java.util.UUID;
 
 @Service
 public class TokenSessionService {
-    public static final long SESSION_TTL = 3600;
     private final StringRedisTemplate redisTemplate;
+    private final long sessionTtl;
 
-    public TokenSessionService(StringRedisTemplate redisTemplate) {
+    public TokenSessionService(StringRedisTemplate redisTemplate,
+                               @Value("${jcloud.session.ttl-seconds}") long sessionTtl) {
         this.redisTemplate = redisTemplate;
+        this.sessionTtl = sessionTtl;
+    }
+
+    public long getSessionTtl() {
+        return sessionTtl;
     }
 
     public void activateSession(String token, UUID userId, long ttlSeconds) {

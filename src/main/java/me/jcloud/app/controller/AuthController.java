@@ -7,6 +7,7 @@ import me.jcloud.app.model.User;
 import me.jcloud.app.security.JwtService;
 import me.jcloud.app.security.TokenSessionService;
 import me.jcloud.app.service.UserService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,11 +19,17 @@ public class AuthController {
     private final JwtService jwtService;
     private final TokenSessionService sessionService;
     private final UserService userService;
+    private final long sessionTtl;
 
-    public AuthController(JwtService jwtService, TokenSessionService sessionService, UserService userService) {
+    public AuthController(
+            JwtService jwtService,
+            TokenSessionService sessionService,
+            UserService userService,
+            @Value("${jcloud.session.ttl-seconds}") long sessionTtl) {
         this.jwtService = jwtService;
         this.sessionService = sessionService;
         this.userService = userService;
+        this.sessionTtl = sessionTtl;
     }
 
     @PostMapping("/register")
@@ -35,7 +42,7 @@ public class AuthController {
         );
         
         String token = jwtService.createToken(user.getId());
-        sessionService.activateSession(token, user.getId(), TokenSessionService.SESSION_TTL);
+        sessionService.activateSession(token, user.getId(), this.sessionTtl);
         return Map.of("token", token);
     }
 
@@ -47,7 +54,7 @@ public class AuthController {
         );
         
         String token = jwtService.createToken(user.getId());
-        sessionService.activateSession(token, user.getId(), TokenSessionService.SESSION_TTL);
+        sessionService.activateSession(token, user.getId(), this.sessionTtl);
 
         return Map.of("token", token);
     }

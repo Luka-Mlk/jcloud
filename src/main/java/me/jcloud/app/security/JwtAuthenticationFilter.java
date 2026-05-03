@@ -1,37 +1,37 @@
 package me.jcloud.app.security;
- 
- import jakarta.servlet.FilterChain;
- import jakarta.servlet.ServletException;
- import jakarta.servlet.http.HttpServletRequest;
- import jakarta.servlet.http.HttpServletResponse;
- import org.springframework.beans.factory.annotation.Qualifier;
- import org.springframework.stereotype.Component;
- import org.springframework.web.filter.OncePerRequestFilter;
- import org.springframework.web.servlet.HandlerExceptionResolver;
- 
- import java.io.IOException;
- import java.util.UUID;
- 
- @Component
- public class JwtAuthenticationFilter extends OncePerRequestFilter {
- 
-     private final JwtService jwtService;
-     private final TokenSessionService sessionService;
-     private final HandlerExceptionResolver resolver;
- 
-     public JwtAuthenticationFilter(JwtService jwtService, 
-                                    TokenSessionService sessionService,
-                                    @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) {
-         this.jwtService = jwtService;
-         this.sessionService = sessionService;
-         this.resolver = resolver;
-     }
- 
-     @Override
-     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-             throws ServletException, IOException {
- 
-         try {
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+
+import java.io.IOException;
+import java.util.UUID;
+
+@Component
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private final JwtService jwtService;
+    private final TokenSessionService sessionService;
+    private final HandlerExceptionResolver resolver;
+
+    public JwtAuthenticationFilter(JwtService jwtService,
+            TokenSessionService sessionService,
+            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) {
+        this.jwtService = jwtService;
+        this.sessionService = sessionService;
+        this.resolver = resolver;
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+
+        try {
             String path = request.getServletPath();
             if (path.startsWith("/api/v1/auth/")) {
                 filterChain.doFilter(request, response);
@@ -48,7 +48,7 @@ package me.jcloud.app.security;
             if (!sessionService.isSessionActive(jwt)) {
                 throw new me.jcloud.app.exception.UnauthorizedException("Session has expired or is invalid");
             }
-            sessionService.refreshSession(jwt, TokenSessionService.SESSION_TTL);
+            sessionService.refreshSession(jwt, sessionService.getSessionTtl());
             String userId = jwtService.extractUserId(jwt);
             request.setAttribute("authenticatedUserId", UUID.fromString(userId));
 
