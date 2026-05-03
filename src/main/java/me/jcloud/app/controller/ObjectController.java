@@ -10,11 +10,12 @@ import me.jcloud.app.model.UploadSession;
 import me.jcloud.app.repository.FileMetadataRepository;
 import me.jcloud.app.repository.UploadSessionRepository;
 import me.jcloud.app.service.BucketService;
+import me.jcloud.app.service.ObjectService;
 import me.jcloud.app.service.StorageService;
 import org.apache.commons.fileupload2.core.FileItemInput;
 import org.apache.commons.fileupload2.core.FileItemInputIterator;
 import org.apache.commons.fileupload2.jakarta.servlet6.JakartaServletFileUpload;
-import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -38,21 +39,20 @@ public class ObjectController {
     private final UploadSessionRepository uploadSessionRepository;
     private final StorageService storageService;
     private final BucketService bucketService;
+    private final ObjectService objectService;
 
     public ObjectController(FileMetadataRepository repository,
-            UploadSessionRepository uploadSessionRepository,
-            StorageService storageService,
-            BucketService bucketService) {
+                            UploadSessionRepository uploadSessionRepository,
+                            StorageService storageService,
+                            BucketService bucketService,
+                            ObjectService objectService) {
         this.repository = repository;
         this.uploadSessionRepository = uploadSessionRepository;
         this.storageService = storageService;
         this.bucketService = bucketService;
+        this.objectService = objectService;
     }
 
-    /**
-     * Multipart form upload.
-     * POST /api/v1/objects/{bucketName}
-     */
     @PostMapping
     public ObjectResponse uploadMultipart(
             @PathVariable String bucketName,
@@ -71,30 +71,8 @@ public class ObjectController {
         while (iter.hasNext()) {
             FileItemInput item = iter.next();
             if (!item.isFormField()) {
-                String path = item.getName();
-                FileMetadata record = repository.findByBucketAndPath(bucket, path)
-                        .orElseGet(() -> FileMetadata.builder()
-                                .userId(userId)
-                                .bucket(bucket)
-                                .path(path)
-                                .build());
-
-                record.setContentType(item.getContentType());
-                record.setUploadedAt(OffsetDateTime.now(ZoneOffset.UTC));
-                record.setFileSize(0L);
-
-                FileMetadata saved = repository.save(record);
-
                 try (InputStream inputStream = item.getInputStream()) {
-                    long size = storageService.saveFile(saved.getId(), inputStream);
-                    saved.setFileSize(size);
-                    repository.save(saved);
-                    return mapToResponse(saved);
-                } catch (IOException e) {
-                    // Only delete if this was a brand-new record (no pre-existing id)
-                    if (record.getId() == null)
-                        repository.delete(saved);
-                    throw e;
+                    return objectService.storeObject(bucket, item.getName(), item.getContentType(), inputStream, userId);
                 }
             }
         }
@@ -102,10 +80,6 @@ public class ObjectController {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No file found in request");
     }
 
-    /**
-     * Raw body upload (PutObject).
-     * PUT /api/v1/objects/{bucketName}/{key}
-     */
     @PutMapping("/{*key}")
     public ObjectResponse uploadRaw(
             @PathVariable String bucketName,
@@ -116,78 +90,35 @@ public class ObjectController {
         Bucket bucket = bucketService.getBucket(bucketName, userId);
         String cleanedKey = cleanKey(key);
 
-        boolean isNew = false;
-        FileMetadata record = repository.findByBucketAndPath(bucket, cleanedKey)
-                .orElseGet(() -> {
-                    return FileMetadata.builder()
-                            .userId(userId)
-                            .bucket(bucket)
-                            .path(cleanedKey)
-                            .build();
-                });
-
-        isNew = record.getId() == null;
-        record.setContentType(request.getContentType());
-        record.setUploadedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        record.setFileSize(0L);
-
-        FileMetadata saved = repository.save(record);
-
         try (InputStream inputStream = request.getInputStream()) {
-            long size = storageService.saveFile(saved.getId(), inputStream);
-            saved.setFileSize(size);
-            repository.save(saved);
-            return mapToResponse(saved);
-        } catch (IOException e) {
-            if (isNew)
-                repository.delete(saved);
-            throw e;
+            return objectService.storeObject(bucket, cleanedKey, request.getContentType(), inputStream, userId);
         }
     }
 
-    /**
-     * Download object.
-     * GET /api/v1/objects/{bucketName}/{key}
-     */
     @GetMapping("/{*key}")
-    public ResponseEntity<Resource> download(
+    public ResponseEntity<ResourceRegion> download(
             @PathVariable String bucketName,
             @PathVariable String key,
-            @RequestAttribute("authenticatedUserId") UUID userId) {
+            @RequestHeader HttpHeaders headers,
+            @RequestAttribute("authenticatedUserId") UUID userId) throws IOException {
 
         Bucket bucket = bucketService.getBucket(bucketName, userId);
         String cleanedKey = cleanKey(key);
 
         FileMetadata metadata = repository.findByBucketAndPath(bucket, cleanedKey)
-                .orElseThrow(() -> new ResourceNotFoundException("Object not found: " + cleanedKey));
+                .orElseThrow(() -> new ResourceNotFoundException("Object not found"));
 
-        Resource resource = storageService.loadAsResource(metadata.getId());
+        ResourceRegion region = storageService.getResourceRegion(metadata.getId(), headers);
 
-        return ResponseEntity.ok()
+        // If client asked for a range, return 206, otherwise 200.
+        HttpStatus status = headers.getRange().isEmpty() ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT;
+
+        return ResponseEntity.status(status)
                 .contentType(MediaType.parseMediaType(metadata.getContentType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + metadata.getPath() + "\"")
-                .body(resource);
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + metadata.getPath() + "\"")
+                .body(region);
     }
 
-    /**
-     * List objects in bucket.
-     * GET /api/v1/objects/{bucketName}
-     */
-    @GetMapping
-    public Page<ObjectResponse> list(
-            @PathVariable String bucketName,
-            @RequestAttribute("authenticatedUserId") UUID userId,
-            @PageableDefault(sort = "uploadedAt", direction = Sort.Direction.DESC) Pageable pageable) {
-
-        Bucket bucket = bucketService.getBucket(bucketName, userId);
-        return repository.findAllByBucket(bucket, pageable).map(this::mapToResponse);
-    }
-
-    /**
-     * Delete object.
-     * DELETE /api/v1/objects/{bucketName}/{key}
-     */
     @DeleteMapping("/{*key}")
     public ResponseEntity<Void> delete(
             @PathVariable String bucketName,
@@ -200,69 +131,8 @@ public class ObjectController {
         FileMetadata metadata = repository.findByBucketAndPath(bucket, cleanedKey)
                 .orElseThrow(() -> new ResourceNotFoundException("Object not found: " + cleanedKey));
 
-        try {
-            storageService.deleteFile(metadata.getId());
-            repository.delete(metadata);
-            return ResponseEntity.noContent().build();
-        } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    // --- Multipart Session Endpoints ---
-
-    @PostMapping("/sessions")
-    public UploadInitResponse initUpload(
-            @PathVariable String bucketName,
-            @Valid @RequestBody UploadInitRequest request,
-            @RequestAttribute("authenticatedUserId") UUID userId) {
-
-        Bucket bucket = bucketService.getBucket(bucketName, userId);
-
-        return uploadSessionRepository
-                .findByUserIdAndBucketAndPathAndStatus(userId, bucket, request.getPath(), "IN_PROGRESS")
-                .map(existing -> {
-                    try {
-                        // Check disk for existing segments to allow frontend to skip them
-                        List<Integer> parts = storageService.getExistingPartNumbers(existing.getId());
-                        return new UploadInitResponse(existing.getId(), parts);
-                    } catch (IOException e) {
-                        // Fallback to empty list if directory read fails
-                        return new UploadInitResponse(existing.getId(), List.of());
-                    }
-                })
-                .orElseGet(() -> {
-                    UploadSession session = UploadSession.builder()
-                            .userId(userId)
-                            .bucket(bucket)
-                            .path(request.getPath())
-                            .contentType(request.getContentType())
-                            .status("IN_PROGRESS")
-                            .build();
-
-                    UploadSession saved = uploadSessionRepository.save(session);
-                    return new UploadInitResponse(saved.getId(), List.of());
-                });
-    }
-
-    @PutMapping("/sessions/{uploadId}/parts/{partNumber}")
-    public ResponseEntity<Void> uploadPart(
-            @PathVariable String bucketName,
-            @PathVariable UUID uploadId,
-            @PathVariable int partNumber,
-            HttpServletRequest request,
-            @RequestAttribute("authenticatedUserId") UUID userId) throws IOException {
-
-        bucketService.getBucket(bucketName, userId);
-
-        uploadSessionRepository.findByIdAndUserId(uploadId, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Upload session not found"));
-
-        try (InputStream inputStream = request.getInputStream()) {
-            storageService.savePart(uploadId, partNumber, inputStream);
-        }
-
-        return ResponseEntity.ok().build();
+        objectService.deleteObject(metadata);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/sessions/{uploadId}/completion")
@@ -276,7 +146,6 @@ public class ObjectController {
         UploadSession session = uploadSessionRepository.findByIdAndUserId(uploadId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Upload session not found"));
 
-        boolean isNew = false;
         FileMetadata record = repository.findByBucketAndPath(bucket, session.getPath())
                 .orElseGet(() -> FileMetadata.builder()
                         .userId(userId)
@@ -284,35 +153,82 @@ public class ObjectController {
                         .path(session.getPath())
                         .build());
 
-        isNew = record.getId() == null;
         record.setContentType(session.getContentType());
         record.setUploadedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        record.setFileSize(0L);
 
-        FileMetadata saved = repository.save(record);
+        ObjectResponse response = objectService.completeMultipartUpload(record, uploadId, request.getTotalParts());
 
-        try {
-            long totalSize = storageService.mergeParts(uploadId, saved.getId(), request.getTotalParts());
-            saved.setFileSize(totalSize);
-            repository.save(saved);
+        session.setStatus("COMPLETED");
+        uploadSessionRepository.save(session);
 
-            session.setStatus("COMPLETED");
-            uploadSessionRepository.save(session);
-            storageService.cleanupUpload(uploadId);
+        return response;
+    }
 
-            return mapToResponse(saved);
-        } catch (Exception e) {
-            if (isNew)
-                repository.delete(saved);
-            throw e;
+    @GetMapping
+    public Page<ObjectResponse> list(
+            @PathVariable String bucketName,
+            @RequestAttribute("authenticatedUserId") UUID userId,
+            @PageableDefault(sort = "uploadedAt", direction = Sort.Direction.DESC) Pageable pageable) {
+
+        Bucket bucket = bucketService.getBucket(bucketName, userId);
+        return repository.findAllByBucket(bucket, pageable).map(this::mapToResponse);
+    }
+
+    @PostMapping("/sessions")
+    public UploadInitResponse initUpload(
+            @PathVariable String bucketName,
+            @Valid @RequestBody UploadInitRequest request,
+            @RequestAttribute("authenticatedUserId") UUID userId) {
+        Bucket bucket = bucketService.getBucket(bucketName, userId);
+
+        // Ensure path is clean before checking sessions
+        String path = cleanKey(request.getPath());
+
+        return uploadSessionRepository
+                .findByUserIdAndBucketAndPathAndStatus(userId, bucket, path, "IN_PROGRESS")
+                .map(existing -> {
+                    try {
+                        List<Integer> parts = storageService.getExistingPartNumbers(existing.getId());
+                        return new UploadInitResponse(existing.getId(), parts);
+                    } catch (IOException e) {
+                        return new UploadInitResponse(existing.getId(), List.of());
+                    }
+                })
+                .orElseGet(() -> {
+                    UploadSession session = UploadSession.builder()
+                            .userId(userId)
+                            .bucket(bucket)
+                            .path(path)
+                            .contentType(request.getContentType())
+                            .status("IN_PROGRESS")
+                            .build();
+                    UploadSession saved = uploadSessionRepository.save(session);
+                    return new UploadInitResponse(saved.getId(), List.of());
+                });
+    }
+
+    @PutMapping("/sessions/{uploadId}/parts/{partNumber}")
+    public ResponseEntity<Void> uploadPart(
+            @PathVariable String bucketName,
+            @PathVariable UUID uploadId,
+            @PathVariable int partNumber,
+            HttpServletRequest request,
+            @RequestAttribute("authenticatedUserId") UUID userId) throws IOException {
+        bucketService.getBucket(bucketName, userId);
+        uploadSessionRepository.findByIdAndUserId(uploadId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Upload session not found"));
+
+        try (InputStream inputStream = request.getInputStream()) {
+            storageService.savePart(uploadId, partNumber, inputStream);
         }
+        return ResponseEntity.ok().build();
     }
 
     private String cleanKey(String key) {
-        if (key == null)
-            return "";
-        // Remove leading slash if present (Spring's wildcard sometimes includes it)
-        return key.startsWith("/") ? key.substring(1) : key;
+        if (key == null) return "";
+        // Removes leading slash and normalizes
+        String cleaned = org.springframework.util.StringUtils.cleanPath(key);
+        return cleaned.startsWith("/") ? cleaned.substring(1) : cleaned;
     }
 
     private ObjectResponse mapToResponse(FileMetadata file) {
@@ -321,7 +237,7 @@ public class ObjectController {
                 .path(file.getPath())
                 .contentType(file.getContentType())
                 .fileSize(file.getFileSize())
-                .uploadedAt(file.getCreatedAt())
+                .uploadedAt(file.getUploadedAt())
                 .build();
     }
 }

@@ -4,6 +4,8 @@ import me.jcloud.app.exception.ConflictException;
 import me.jcloud.app.exception.ResourceNotFoundException;
 import me.jcloud.app.model.Bucket;
 import me.jcloud.app.repository.BucketRepository;
+import me.jcloud.app.repository.FileMetadataRepository;
+import me.jcloud.app.repository.UploadSessionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,9 +18,18 @@ import java.util.UUID;
 public class BucketService {
 
     private final BucketRepository repository;
+    private final FileMetadataRepository fileRepository;
+    private final StorageService storageService;
+    private final UploadSessionRepository uploadSessionRepository;
 
-    public BucketService(BucketRepository repository) {
+    public BucketService(BucketRepository repository,
+                         FileMetadataRepository fileRepository,
+                         StorageService storageService,
+                         UploadSessionRepository uploadSessionRepository) {
         this.repository = repository;
+        this.fileRepository = fileRepository;
+        this.storageService = storageService;
+        this.uploadSessionRepository = uploadSessionRepository;
     }
 
     public List<Bucket> listBuckets(UUID ownerId) {
@@ -36,7 +47,9 @@ public class BucketService {
                 .createdAt(OffsetDateTime.now(ZoneOffset.UTC))
                 .build();
 
-        return repository.save(bucket);
+        Bucket saved = repository.save(bucket);
+        storageService.createBucketDirectory(name); // Ensure folder exists on disk
+        return saved;
     }
 
     public Bucket getBucket(String name, UUID ownerId) {
@@ -47,7 +60,11 @@ public class BucketService {
     @Transactional
     public void deleteBucket(String name, UUID ownerId) {
         Bucket bucket = getBucket(name, ownerId);
-        // In a real S3 clone, we should check if the bucket is empty
+        if (fileRepository.existsByBucket_Id(bucket.getId())) {
+            throw new ConflictException("Bucket is not empty: " + name);
+        }
+        uploadSessionRepository.deleteByBucketId(bucket.getId());
         repository.delete(bucket);
+        storageService.deleteBucketDirectory(name);
     }
 }

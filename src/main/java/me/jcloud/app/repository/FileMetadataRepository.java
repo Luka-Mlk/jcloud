@@ -23,4 +23,6 @@ public interface FileMetadataRepository extends JpaRepository<FileMetadata, UUID
 
     Optional<FileMetadata> findByBucketAndPath(Bucket bucket, String path);
     Page<FileMetadata> findAllByBucket(Bucket bucket, Pageable pageable);
+
+    boolean existsByBucket_Id(UUID bucketId);
 }
