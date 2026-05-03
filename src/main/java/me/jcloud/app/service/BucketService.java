@@ -1,5 +1,6 @@
 package me.jcloud.app.service;
 
+import me.jcloud.app.exception.ConflictException;
 import me.jcloud.app.exception.ResourceNotFoundException;
 import me.jcloud.app.model.Bucket;
 import me.jcloud.app.repository.BucketRepository;
@@ -26,7 +27,7 @@ public class BucketService {
 
     public Bucket createBucket(String name, UUID ownerId) {
         if (repository.findByName(name).isPresent()) {
-            throw new IllegalArgumentException("Bucket already exists: " + name);
+            throw new ConflictException("Bucket already exists: " + name);
         }
 
         Bucket bucket = Bucket.builder()
