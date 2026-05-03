@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Buckets — JCloud</title>
+  <meta name="description" content="Manage your JCloud storage buckets." />
+  <link rel="stylesheet" th:href="@{/css/style.css}" />
+</head>
+<body class="page-wrap">
+
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="nav-brand"><span class="brand-dot"></span>JCloud</a>
+      <div class="nav-links">
+        <a href="/dashboard" class="nav-link">Dashboard</a>
+        <a href="/buckets"   class="nav-link active">Buckets</a>
+      </div>
+      <div class="nav-right">
+        <button class="btn btn-ghost btn-sm" id="logout-btn">Sign out</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <div class="container">
+
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h1 class="page-title">Buckets</h1>
+          <p class="page-subtitle">Create and manage your storage buckets.</p>
+        </div>
+        <button class="btn btn-primary" id="new-bucket-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          New bucket
+        </button>
+      </div>
+
+      <!-- Loading skeleton -->
+      <div id="loading-state" class="bento-grid bento-3">
+        <div class="card" style="height:120px; background: linear-gradient(90deg,#232323 25%,#2a2a2a 50%,#232323 75%); background-size:200% 100%; animation: shimmer 1.4s infinite;"></div>
+        <div class="card" style="height:120px; background: linear-gradient(90deg,#232323 25%,#2a2a2a 50%,#232323 75%); background-size:200% 100%; animation: shimmer 1.4s infinite;"></div>
+        <div class="card" style="height:120px; background: linear-gradient(90deg,#232323 25%,#2a2a2a 50%,#232323 75%); background-size:200% 100%; animation: shimmer 1.4s infinite;"></div>
+      </div>
+
+      <!-- Empty state -->
+      <div id="empty-state" class="empty-state hidden">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7c0-1.1 4-2 9-2s9 .9 9 2v10c0 1.1-4 2-9 2s-9-.9-9-2V7z"/>
+          <path d="M3 12c0 1.1 4 2 9 2s9-.9 9-2"/>
+        </svg>
+        <p>No buckets yet. Create your first one!</p>
+        <button class="btn btn-primary" id="empty-new-btn">Create bucket</button>
+      </div>
+
+      <!-- Bucket grid -->
+      <div class="bento-grid bento-3" id="bucket-grid"></div>
+
+    </div>
+  </main>
+
+  <!-- Create Bucket Modal -->
+  <div class="modal-backdrop" id="create-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h2 class="modal-title" id="modal-title">New bucket</h2>
+      <div class="form-group">
+        <label for="bucket-name-input">Bucket name</label>
+        <input id="bucket-name-input" type="text" class="input" placeholder="my-bucket" />
+        <span class="form-hint">Lowercase letters, numbers, and hyphens only.</span>
+      </div>
+      <div class="alert alert-error" id="modal-error"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+        <button class="btn btn-primary"   id="modal-confirm">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirm Modal -->
+  <div class="modal-backdrop" id="delete-modal">
+    <div class="modal" role="dialog" aria-modal="true">
+      <h2 class="modal-title">Delete bucket?</h2>
+      <p class="text-muted" style="margin-bottom:var(--sp-4);">
+        This will permanently delete <strong id="delete-bucket-name" style="color:var(--text-main)"></strong>
+        and all its objects. This cannot be undone.
+      </p>
+      <div class="alert alert-error" id="delete-error"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="delete-cancel">Cancel</button>
+        <button class="btn btn-danger"    id="delete-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <style>
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  </style>
+
+  <script type="module">
+    import { authGuard, logout, listBuckets, createBucket, deleteBucket, toast } from '/js/api.js';
+
+    if (!authGuard()) throw new Error('redirect');
+
+    document.getElementById('logout-btn').addEventListener('click', () => logout());
+    document.getElementById('new-bucket-btn').addEventListener('click', openCreateModal);
+    document.getElementById('empty-new-btn').addEventListener('click', openCreateModal);
+
+    // ── Load buckets ─────────────────────────────────────────
+    async function loadBuckets() {
+      try {
+        const buckets = await listBuckets();
+        document.getElementById('loading-state').classList.add('hidden');
+
+        if (buckets.length === 0) {
+          document.getElementById('empty-state').classList.remove('hidden');
+          return;
+        }
+
+        renderBuckets(buckets);
+      } catch (err) {
+        toast('Failed to load buckets', 'error');
+        document.getElementById('loading-state').classList.add('hidden');
+      }
+    }
+
+    function renderBuckets(buckets) {
+      const grid = document.getElementById('bucket-grid');
+      grid.innerHTML = buckets.map(b => `
+        <div class="card bucket-card" style="position:relative;">
+          <a href="/${esc(b.name)}/objects" style="text-decoration:none; color:inherit; display:flex; flex-direction:column; gap:var(--sp-3); flex:1;">
+            <div class="bucket-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                   fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 7c0-1.1 4-2 9-2s9 .9 9 2v10c0 1.1-4 2-9 2s-9-.9-9-2V7z"/>
+                <path d="M3 12c0 1.1 4 2 9 2s9-.9 9-2"/>
+              </svg>
+            </div>
+            <div class="bucket-name">${esc(b.name)}</div>
+            <div class="bucket-meta">Created ${formatRelative(b.createdAt)}</div>
+          </a>
+          <button
+            class="btn btn-danger btn-sm"
+            style="position:absolute; top:var(--sp-4); right:var(--sp-4);"
+            data-name="${esc(b.name)}"
+            onclick="window._openDelete(this.dataset.name)"
+          >Delete</button>
+        </div>
+      `).join('');
+    }
+
+    // ── Create modal ──────────────────────────────────────────
+    const createModal = document.getElementById('create-modal');
+    const nameInput   = document.getElementById('bucket-name-input');
+    const modalErr    = document.getElementById('modal-error');
+
+    function openCreateModal() {
+      nameInput.value = '';
+      modalErr.textContent = ''; modalErr.classList.remove('show');
+      createModal.classList.add('open');
+      setTimeout(() => nameInput.focus(), 80);
+    }
+
+    document.getElementById('modal-cancel').addEventListener('click', () => createModal.classList.remove('open'));
+    createModal.addEventListener('click', (e) => { if (e.target === createModal) createModal.classList.remove('open'); });
+
+    document.getElementById('modal-confirm').addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      if (!name) { showModalErr('Bucket name is required.'); return; }
+      if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/.test(name)) {
+        showModalErr('Only lowercase letters, numbers, and hyphens. Must start and end with alphanumeric.');
+        return;
+      }
+      try {
+        await createBucket(name);
+        createModal.classList.remove('open');
+        toast(`Bucket "${name}" created`, 'success');
+        loadBuckets();
+      } catch (err) {
+        showModalErr(err.message || 'Could not create bucket.');
+      }
+    });
+
+    nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('modal-confirm').click(); });
+    function showModalErr(msg) { modalErr.textContent = msg; modalErr.classList.add('show'); }
+
+    // ── Delete modal ──────────────────────────────────────────
+    const deleteModal   = document.getElementById('delete-modal');
+    const deleteNameEl  = document.getElementById('delete-bucket-name');
+    const deleteErr     = document.getElementById('delete-error');
+    let pendingDelete   = null;
+
+    window._openDelete = (name) => {
+      pendingDelete = name;
+      deleteNameEl.textContent = name;
+      deleteErr.textContent = ''; deleteErr.classList.remove('show');
+      deleteModal.classList.add('open');
+    };
+
+    document.getElementById('delete-cancel').addEventListener('click', () => deleteModal.classList.remove('open'));
+    deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) deleteModal.classList.remove('open'); });
+
+    document.getElementById('delete-confirm').addEventListener('click', async () => {
+      if (!pendingDelete) return;
+      try {
+        await deleteBucket(pendingDelete);
+        deleteModal.classList.remove('open');
+        toast(`Bucket "${pendingDelete}" deleted`, 'info');
+        pendingDelete = null;
+        loadBuckets();
+      } catch (err) {
+        deleteErr.textContent = err.message || 'Delete failed.';
+        deleteErr.classList.add('show');
+      }
+    });
+
+    // ── Helpers ───────────────────────────────────────────────
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function formatRelative(iso) {
+      if (!iso) return '';
+      const diff = Date.now() - new Date(iso).getTime();
+      const m = Math.floor(diff / 60000);
+      if (m < 1)  return 'just now';
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      return `${Math.floor(h/24)}d ago`;
+    }
+
+    loadBuckets();
+  </script>
+</body>
+</html>

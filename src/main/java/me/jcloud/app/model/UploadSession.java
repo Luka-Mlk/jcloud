@@ -11,7 +11,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class UploadSession {
+public class UploadSession extends BaseAuditEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -32,7 +32,4 @@ public class UploadSession {
 
     @Column(nullable = false)
     private String status; // IN_PROGRESS, COMPLETED, ABORTED
-
-    @Column(nullable = false)
-    private OffsetDateTime createdAt;
 }

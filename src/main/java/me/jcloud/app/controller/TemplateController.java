@@ -25,4 +25,14 @@ public class TemplateController {
     public String dashboard() {
         return "dashboard";
     }
+
+    @GetMapping("/buckets")
+    public String bucket() {
+        return "buckets";
+    }
+
+    @GetMapping("/{bucketId}/objects")
+    public String object() {
+        return "objects";
+    }
 }

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — JCloud</title>
+  <meta name="description" content="JCloud dashboard — overview of your buckets and recent uploads." />
+  <link rel="stylesheet" th:href="@{/css/style.css}" />
+</head>
+<body class="page-wrap">
+
+<!-- Navbar -->
+<nav class="navbar">
+  <div class="container">
+    <a href="/" class="nav-brand">
+      <span class="brand-dot"></span>
+      JCloud
+    </a>
+    <div class="nav-links">
+      <a href="/dashboard" class="nav-link active">Dashboard</a>
+      <a href="/buckets"   class="nav-link">Buckets</a>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-ghost btn-sm" id="logout-btn">Sign out</button>
+    </div>
+  </div>
+</nav>
+
+<main class="main-content">
+  <div class="container">
+
+    <div class="mb-8">
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-subtitle">An overview of your storage at a glance.</p>
+    </div>
+
+    <!-- Stats bento grid -->
+    <div class="bento-grid bento-4 mb-8" id="stats-grid">
+      <!-- Bucket count -->
+      <div class="card stat-card">
+        <div class="stat-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+               fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7c0-1.1 4-2 9-2s9 .9 9 2v10c0 1.1-4 2-9 2s-9-.9-9-2V7z"/>
+            <path d="M3 12c0 1.1 4 2 9 2s9-.9 9-2"/>
+          </svg>
+        </div>
+        <div class="stat-value" id="stat-buckets">—</div>
+        <div class="stat-label">Total Buckets</div>
+      </div>
+
+      <!-- Object count -->
+      <div class="card stat-card">
+        <div class="stat-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+               fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+        </div>
+        <div class="stat-value" id="stat-objects">—</div>
+        <div class="stat-label">Total Objects</div>
+      </div>
+
+      <!-- Total storage -->
+      <div class="card stat-card">
+        <div class="stat-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+               fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+            <line x1="6" y1="6" x2="6.01" y2="6"/>
+            <line x1="6" y1="18" x2="6.01" y2="18"/>
+          </svg>
+        </div>
+        <div class="stat-value" id="stat-storage">—</div>
+        <div class="stat-label">Storage Used</div>
+      </div>
+
+      <!-- Quick action: new bucket -->
+      <div class="card stat-card" style="cursor:pointer; border-style:dashed;" id="quick-new-bucket">
+        <div class="stat-icon" style="background:var(--border-subtle);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+               fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </div>
+        <div class="stat-value" style="font-size:1rem; color:var(--text-muted);">New bucket</div>
+        <div class="stat-label">Click to create</div>
+      </div>
+    </div>
+
+    <!-- Recent uploads -->
+    <div class="bento-grid bento-2" style="gap:var(--sp-4);">
+      <div class="card span-2" style="padding:0; overflow:hidden;">
+        <div class="card-header" style="padding:var(--sp-5) var(--sp-6);">
+          <h2 class="card-title">Recent uploads</h2>
+          <span class="badge badge-gray" id="recent-count">—</span>
+        </div>
+        <div class="table-wrap" style="border:none; border-radius:0;">
+          <table id="recent-table">
+            <thead>
+            <tr>
+              <th>Object</th>
+              <th>Bucket</th>
+              <th>Size</th>
+              <th>Uploaded</th>
+            </tr>
+            </thead>
+            <tbody id="recent-body">
+            <tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:32px;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- Create Bucket Modal -->
+<div class="modal-backdrop" id="create-modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h2 class="modal-title" id="modal-title">Create a new bucket</h2>
+    <div class="form-group">
+      <label for="bucket-name-input">Bucket name</label>
+      <input id="bucket-name-input" type="text" class="input" placeholder="my-bucket" />
+      <span class="form-hint">Lowercase letters, numbers, and hyphens only.</span>
+    </div>
+    <div class="alert alert-error" id="modal-error"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary"   id="modal-confirm">Create bucket</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script type="module">
+  // NOTE: Added getStorageStats to imports
+  import { authGuard, logout, listBuckets, createBucket, listObjects, getStorageStats, formatBytes, formatDate, toast } from '/js/api.js';
+
+  if (!authGuard()) throw new Error('redirect');
+
+  document.getElementById('logout-btn').addEventListener('click', () => logout());
+  document.getElementById('quick-new-bucket').addEventListener('click', openModal);
+
+  /**
+   * loadDashboard()
+   * Fetches precise aggregate stats from the backend and
+   * gathers recent objects across all buckets.
+   */
+  async function loadDashboard() {
+    try {
+      // 1. Fetch aggregate stats (Fixes 0B and inaccurate counts)
+      const stats = await getStorageStats();
+      document.getElementById('stat-buckets').textContent = stats.totalBuckets;
+      document.getElementById('stat-objects').textContent = stats.totalObjects;
+      document.getElementById('stat-storage').textContent = formatBytes(stats.totalBytes);
+
+      // 2. Fetch buckets to populate the "Recent" list
+      const buckets = await listBuckets();
+      const recentItems = [];
+
+      await Promise.all(buckets.map(async (b) => {
+        try {
+          // Get first page of each bucket for the recent list
+          const page = await listObjects(b.name, 0, 5);
+          (page.content || []).forEach(obj => {
+            recentItems.push({ ...obj, bucket_name: b.name });
+          });
+        } catch (_) { /* ignore inaccessible */ }
+      }));
+
+      renderRecent(recentItems);
+    } catch (err) {
+      toast('Failed to load dashboard data', 'error');
+    }
+  }
+
+  /**
+   * renderRecent()
+   * Sorts and displays the top 5 most recent files.
+   */
+  function renderRecent(items) {
+    // Update sorting key to snake_case
+    items.sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
+
+    const top5 = items.slice(0, 5);
+    document.getElementById('recent-count').textContent = top5.length;
+
+    const tbody = document.getElementById('recent-body');
+    if (top5.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:32px;">No uploads yet.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = top5.map(obj => `
+    <tr>
+      <td class="td-mono">${esc(obj.path)}</td>
+      <!-- Changed from bucketName to bucket_name -->
+      <td><a href="/${esc(obj.bucket_name)}/objects" style="color:var(--text-muted)">${esc(obj.bucket_name)}</a></td>
+      <!-- Changed from fileSize to file_size -->
+      <td class="td-muted">${formatBytes(obj.file_size)}</td>
+      <!-- Changed from uploadedAt to uploaded_at -->
+      <td class="td-muted">${formatDate(obj.uploaded_at)}</td>
+    </tr>
+  `).join('');
+  }
+
+  // ── Create bucket modal logic ────────────────────────────
+  const modal     = document.getElementById('create-modal');
+  const nameInput = document.getElementById('bucket-name-input');
+  const modalErr  = document.getElementById('modal-error');
+
+  function openModal() {
+    nameInput.value = '';
+    modalErr.textContent = ''; modalErr.classList.remove('show');
+    modal.classList.add('open');
+    setTimeout(() => nameInput.focus(), 80);
+  }
+
+  document.getElementById('modal-cancel').addEventListener('click', () => modal.classList.remove('open'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
+
+  document.getElementById('modal-confirm').addEventListener('click', async () => {
+    const name = nameInput.value.trim();
+    if (!name) { showModalErr('Bucket name is required.'); return; }
+    if (!/^[a-z0-9-]+$/.test(name)) { showModalErr('Only lowercase letters, numbers, and hyphens allowed.'); return; }
+
+    try {
+      await createBucket(name);
+      modal.classList.remove('open');
+      toast(`Bucket "${name}" created`, 'success');
+      loadDashboard();
+    } catch (err) {
+      showModalErr(err.message || 'Could not create bucket.');
+    }
+  });
+
+  nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('modal-confirm').click(); });
+
+  function showModalErr(msg) { modalErr.textContent = msg; modalErr.classList.add('show'); }
+  function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  loadDashboard();
+</script>
+</body>
+</html>

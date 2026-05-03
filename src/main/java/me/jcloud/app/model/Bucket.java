@@ -14,7 +14,7 @@ import java.util.UUID;
 @Table(name = "buckets", uniqueConstraints = {
     @UniqueConstraint(columnNames = "name")
 })
-public class Bucket {
+public class Bucket extends BaseAuditEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
