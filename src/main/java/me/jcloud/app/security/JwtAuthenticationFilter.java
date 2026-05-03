@@ -37,26 +37,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
         String path = request.getServletPath();
-
-        boolean isWhitelisted = EXACT_MATCH_PATHS.contains(path);
-        boolean isObjectPath = path.endsWith("/objects");
-        boolean isAuthPath = path.startsWith("/api/v1/auth/");
-
-        boolean isStaticResource = path.startsWith("/css/") ||
-                path.startsWith("/js/") ||
-                path.startsWith("/images/") ||
-                path.startsWith("/favicon.ico") ||
-                path.endsWith(".css") ||
-                path.endsWith(".js") ||
-                path.endsWith(".png") ||
-                path.endsWith(".jpg");
-
-        return isWhitelisted || isObjectPath || isAuthPath || isStaticResource;
+        return !path.startsWith("/api/v1/");
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+
+        String path = request.getServletPath();
+        if (path.startsWith("/api/v1/auth/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         try {
             String authHeader = request.getHeader("Authorization");
@@ -71,8 +63,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 throw new me.jcloud.app.exception.UnauthorizedException("Session has expired or is invalid");
             }
 
-            sessionService.refreshSession(jwt, sessionService.getSessionTtl());
-
             String userId = jwtService.extractUserId(jwt);
             request.setAttribute("authenticatedUserId", UUID.fromString(userId));
 
@@ -80,7 +70,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     userId, null, Collections.emptyList());
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
-
             filterChain.doFilter(request, response);
         } catch (Exception ex) {
             resolver.resolveException(request, response, null, ex);
