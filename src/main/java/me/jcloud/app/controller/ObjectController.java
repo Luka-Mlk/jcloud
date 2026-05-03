@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -218,17 +219,30 @@ public class ObjectController {
 
         Bucket bucket = bucketService.getBucket(bucketName, userId);
 
-        UploadSession session = UploadSession.builder()
-                .userId(userId)
-                .bucket(bucket)
-                .path(request.getPath())
-                .contentType(request.getContentType())
-                .status("IN_PROGRESS")
-                .createdAt(OffsetDateTime.now(ZoneOffset.UTC))
-                .build();
+        return uploadSessionRepository
+                .findByUserIdAndBucketAndPathAndStatus(userId, bucket, request.getPath(), "IN_PROGRESS")
+                .map(existing -> {
+                    try {
+                        // Check disk for existing segments to allow frontend to skip them
+                        List<Integer> parts = storageService.getExistingPartNumbers(existing.getId());
+                        return new UploadInitResponse(existing.getId(), parts);
+                    } catch (IOException e) {
+                        // Fallback to empty list if directory read fails
+                        return new UploadInitResponse(existing.getId(), List.of());
+                    }
+                })
+                .orElseGet(() -> {
+                    UploadSession session = UploadSession.builder()
+                            .userId(userId)
+                            .bucket(bucket)
+                            .path(request.getPath())
+                            .contentType(request.getContentType())
+                            .status("IN_PROGRESS")
+                            .build();
 
-        UploadSession saved = uploadSessionRepository.save(session);
-        return new UploadInitResponse(saved.getId());
+                    UploadSession saved = uploadSessionRepository.save(session);
+                    return new UploadInitResponse(saved.getId(), List.of());
+                });
     }
 
     @PutMapping("/sessions/{uploadId}/parts/{partNumber}")
@@ -304,12 +318,10 @@ public class ObjectController {
     private ObjectResponse mapToResponse(FileMetadata file) {
         return ObjectResponse.builder()
                 .id(file.getId())
-                .userId(file.getUserId())
-                .bucketName(file.getBucket().getName())
                 .path(file.getPath())
                 .contentType(file.getContentType())
                 .fileSize(file.getFileSize())
-                .uploadedAt(file.getUploadedAt())
+                .uploadedAt(file.getCreatedAt())
                 .build();
     }
 }

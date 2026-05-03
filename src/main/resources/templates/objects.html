@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Objects — JCloud</title>
+  <meta name="description" content="Browse, upload, download and delete objects in your JCloud bucket." />
+  <link rel="stylesheet" th:href="@{/css/style.css}" />
+</head>
+<body class="page-wrap">
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="nav-brand"><span class="brand-dot"></span>JCloud</a>
+      <div class="nav-links">
+        <a href="/dashboard" class="nav-link">Dashboard</a>
+        <a href="/buckets"   class="nav-link">Buckets</a>
+        <!-- Breadcrumb: Buckets › {name} -->
+        <span style="color:var(--text-faint); margin: 0 2px;">/</span>
+        <span class="nav-link active" id="nav-bucket-name" style="cursor:default;">…</span>
+      </div>
+      <div class="nav-right">
+        <button class="btn btn-ghost btn-sm" id="logout-btn">Sign out</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <div class="container">
+
+      <!-- Page header -->
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h1 class="page-title" id="page-title">Objects</h1>
+          <p class="page-subtitle" id="page-subtitle">Loading bucket…</p>
+        </div>
+        <div class="flex gap-3">
+          <button class="btn btn-secondary" id="refresh-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            Refresh
+          </button>
+          <button class="btn btn-primary" id="upload-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 16 12 12 8 16"/>
+              <line x1="12" y1="12" x2="12" y2="21"/>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+            </svg>
+            Upload files
+          </button>
+        </div>
+      </div>
+
+      <!-- Upload zone (hidden by default) -->
+      <div id="upload-section" class="hidden mb-6">
+        <div class="upload-zone" id="drop-zone" role="button" tabindex="0" aria-label="Upload files by clicking or dragging here">
+          <div class="upload-zone-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 16 12 12 8 16"/>
+              <line x1="12" y1="12" x2="12" y2="21"/>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+            </svg>
+          </div>
+          <p class="upload-zone-title">Drop files here, or click to select</p>
+          <p class="upload-zone-hint">Files &lt; 5 MB upload in one shot · Larger files upload in chunks automatically</p>
+        </div>
+        <input type="file" id="file-input" multiple class="hidden" />
+        <div class="progress-list" id="progress-list"></div>
+      </div>
+
+      <!-- Objects table -->
+      <div id="table-section">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40%">Key / Path</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Uploaded</th>
+                <th style="width:120px; text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="objects-body">
+              <tr>
+                <td colspan="5" style="text-align:center; color:var(--text-muted); padding:40px;">
+                  <span class="spinner" style="margin:0 auto;"></span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Empty state (inside table section) -->
+        <div id="empty-state" class="empty-state hidden">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <p>This bucket is empty. Upload your first file!</p>
+          <button class="btn btn-primary" id="empty-upload-btn">Upload files</button>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination"></div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Delete Confirm Modal -->
+  <div class="modal-backdrop" id="delete-modal">
+    <div class="modal" role="dialog" aria-modal="true">
+      <h2 class="modal-title">Delete object?</h2>
+      <p class="text-muted" style="margin-bottom:var(--sp-2);">
+        Permanently delete:
+      </p>
+      <p class="td-mono" id="delete-key-display" style="margin-bottom:var(--sp-5); font-family:var(--font-mono); font-size:0.82rem; color:var(--cyan); word-break:break-all;"></p>
+      <div class="alert alert-error" id="delete-error"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="delete-cancel">Cancel</button>
+        <button class="btn btn-danger"    id="delete-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script type="module">
+    import {
+      authGuard, logout,
+      listObjects, deleteObject, downloadObject,
+      formatBytes, formatDate, toast,
+    } from '/js/api.js';
+    import { uploadFile, wireDropZone, createProgressItem } from '/js/upload.js';
+
+    if (!authGuard()) throw new Error('redirect');
+
+    // ── Resolve bucket name from URL path ────────────────────
+    // URL pattern: /{bucketName}/objects
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const BUCKET = pathParts[0]; // e.g. "my-bucket"
+
+    if (!BUCKET) {
+      window.location.href = '/buckets';
+      throw new Error('No bucket in URL');
+    }
+
+    // Update page chrome
+    document.getElementById('nav-bucket-name').textContent = BUCKET;
+    document.getElementById('page-title').textContent      = BUCKET;
+    document.title = `${BUCKET} — JCloud`;
+
+    document.getElementById('logout-btn').addEventListener('click', () => logout());
+
+    // ── Pagination state ─────────────────────────────────────
+    let currentPage  = 0;
+    let totalPages   = 0;
+    const PAGE_SIZE  = 20;
+
+    // ── Load objects ─────────────────────────────────────────
+    async function loadObjects(page = 0) {
+      currentPage = page;
+      const tbody = document.getElementById('objects-body');
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:40px;">
+        <span class="spinner" style="margin:0 auto; display:block; width:16px;height:16px;"></span></td></tr>`;
+      document.getElementById('empty-state').classList.add('hidden');
+      document.getElementById('pagination').innerHTML = '';
+
+      try {
+        const data = await listObjects(BUCKET, page, PAGE_SIZE);
+        const items = data.content || [];
+        totalPages  = data.totalPages ?? 1;
+
+        document.getElementById('page-subtitle').textContent =
+          `${data.totalElements ?? items.length} object${(data.totalElements ?? items.length) !== 1 ? 's' : ''} in this bucket`;
+
+        if (items.length === 0) {
+          tbody.innerHTML = '';
+          document.getElementById('empty-state').classList.remove('hidden');
+        } else {
+          renderTable(items);
+          renderPagination();
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--red); padding:32px;">${esc(err.message)}</td></tr>`;
+        toast('Failed to load objects: ' + err.message, 'error');
+      }
+    }
+
+    function renderTable(items) {
+      const tbody = document.getElementById('objects-body');
+      tbody.innerHTML = items.map(obj => `
+        <tr>
+          <td>
+            <span class="td-mono" style="display:block; word-break:break-all;">${esc(obj.path)}</span>
+          </td>
+          <td>
+            <span class="badge ${contentTypeBadge(obj.contentType)}">${esc(shortMime(obj.content_type))}</span>
+          </td>
+          <td class="td-muted">${formatBytes(obj.file_size)}</td>
+          <td class="td-muted">${formatDate(obj.uploaded_at)}</td>
+          <td style="text-align:right;">
+            <div class="flex gap-3" style="justify-content:flex-end;">
+              <button
+                class="btn btn-ghost btn-sm"
+                title="Download"
+                onclick="window._download('${esc(obj.path)}')"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </button>
+              <button
+                class="btn btn-danger btn-sm"
+                title="Delete"
+                onclick="window._openDelete('${esc(obj.path)}')"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                  <path d="M10 11v6"/><path d="M14 11v6"/>
+                  <path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderPagination() {
+      if (totalPages <= 1) return;
+      const pg = document.getElementById('pagination');
+      const pages = [];
+
+      // Prev
+      pages.push(`<button class="page-btn" ${currentPage === 0 ? 'disabled' : ''} data-page="${currentPage - 1}">← Prev</button>`);
+
+      // Page numbers (show up to 7 around current)
+      const start = Math.max(0, currentPage - 3);
+      const end   = Math.min(totalPages - 1, currentPage + 3);
+      for (let i = start; i <= end; i++) {
+        pages.push(`<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i + 1}</button>`);
+      }
+
+      // Next
+      pages.push(`<button class="page-btn" ${currentPage >= totalPages - 1 ? 'disabled' : ''} data-page="${currentPage + 1}">Next →</button>`);
+
+      pg.innerHTML = pages.join('');
+      pg.querySelectorAll('.page-btn:not([disabled])').forEach(btn => {
+        btn.addEventListener('click', () => loadObjects(+btn.dataset.page));
+      });
+    }
+
+    // ── Upload zone ───────────────────────────────────────────
+    const uploadSection = document.getElementById('upload-section');
+    const dropZone      = document.getElementById('drop-zone');
+    const fileInput     = document.getElementById('file-input');
+    const progressList  = document.getElementById('progress-list');
+
+    document.getElementById('upload-btn').addEventListener('click', () => {
+      uploadSection.classList.toggle('hidden');
+      if (!uploadSection.classList.contains('hidden')) {
+        dropZone.focus();
+      }
+    });
+
+    document.getElementById('empty-upload-btn').addEventListener('click', () => {
+      document.getElementById('empty-state').classList.add('hidden');
+      uploadSection.classList.remove('hidden');
+      dropZone.focus();
+    });
+
+    document.getElementById('refresh-btn').addEventListener('click', () => loadObjects(currentPage));
+
+    dropZone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+    });
+
+    wireDropZone(dropZone, fileInput, handleFiles);
+
+    async function handleFiles(files) {
+      for (const file of files) {
+        await queueUpload(file);
+      }
+    }
+
+    async function queueUpload(file) {
+      const { update, remove } = createProgressItem(progressList, file.name);
+
+      try {
+        await uploadFile(BUCKET, file, {
+          onProgress: (pct) => update(pct),
+        });
+
+        update(100, 'done');
+        toast(`"${file.name}" uploaded`, 'success');
+
+        // Auto-remove progress item and refresh table after a beat
+        setTimeout(() => {
+          remove();
+          loadObjects(0);
+        }, 1800);
+
+      } catch (err) {
+        update(0, 'error');
+        toast(`Failed to upload "${file.name}": ${err.message}`, 'error');
+      }
+    }
+
+    // ── Download ──────────────────────────────────────────────
+    window._download = async (key) => {
+      try {
+        await downloadObject(BUCKET, key, key.split('/').pop());
+      } catch (err) {
+        toast('Download failed: ' + err.message, 'error');
+      }
+    };
+
+    // ── Delete modal ──────────────────────────────────────────
+    const deleteModal  = document.getElementById('delete-modal');
+    const deleteKeyEl  = document.getElementById('delete-key-display');
+    const deleteErrEl  = document.getElementById('delete-error');
+    let pendingKey     = null;
+
+    window._openDelete = (key) => {
+      pendingKey = key;
+      deleteKeyEl.textContent = key;
+      deleteErrEl.textContent = ''; deleteErrEl.classList.remove('show');
+      deleteModal.classList.add('open');
+    };
+
+    document.getElementById('delete-cancel').addEventListener('click', () => deleteModal.classList.remove('open'));
+    deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) deleteModal.classList.remove('open'); });
+
+    document.getElementById('delete-confirm').addEventListener('click', async () => {
+      if (!pendingKey) return;
+      try {
+        await deleteObject(BUCKET, pendingKey);
+        deleteModal.classList.remove('open');
+        toast(`"${pendingKey}" deleted`, 'info');
+        pendingKey = null;
+        loadObjects(currentPage);
+      } catch (err) {
+        deleteErrEl.textContent = err.message || 'Delete failed.';
+        deleteErrEl.classList.add('show');
+      }
+    });
+
+    // ── Helpers ───────────────────────────────────────────────
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function shortMime(mime) {
+      if (!mime) return 'unknown';
+      const map = {
+        'application/json':  'JSON',
+        'application/pdf':   'PDF',
+        'application/zip':   'ZIP',
+        'application/octet-stream': 'binary',
+        'text/plain':        'text',
+        'text/html':         'HTML',
+        'text/csv':          'CSV',
+      };
+      if (map[mime]) return map[mime];
+      if (mime.startsWith('image/')) return mime.replace('image/', '');
+      if (mime.startsWith('video/')) return mime.replace('video/', '');
+      if (mime.startsWith('audio/')) return mime.replace('audio/', '');
+      return mime.split('/')[1] ?? mime;
+    }
+
+    function contentTypeBadge(mime) {
+      if (!mime) return 'badge-gray';
+      if (mime.startsWith('image/'))       return 'badge-green';
+      if (mime.startsWith('video/') || mime.startsWith('audio/')) return 'badge-amber';
+      if (mime === 'application/json' || mime.startsWith('text/')) return 'badge-gray';
+      return 'badge-gray';
+    }
+
+    // ── Init ─────────────────────────────────────────────────
+    loadObjects(0);
+  </script>
+</body>
+</html>

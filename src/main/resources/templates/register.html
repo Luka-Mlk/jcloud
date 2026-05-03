@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create account — JCloud</title>
+  <meta name="description" content="Create a free JCloud account and start managing your object storage." />
+  <link rel="stylesheet" th:href="@{/css/style.css}" />
+</head>
+<body>
+
+  <div class="auth-wrap">
+    <div class="auth-card">
+
+      <div class="auth-logo">
+        <span class="brand-dot"></span>
+        JCloud
+      </div>
+
+      <h1 class="auth-title">Create an account</h1>
+      <p class="auth-sub">Start storing files in seconds.</p>
+
+      <div class="alert alert-error" id="register-error" role="alert"></div>
+
+      <form id="register-form" novalidate>
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            class="input"
+            placeholder="johndoe"
+            autocomplete="username"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email address</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            class="input"
+            placeholder="you@example.com"
+            autocomplete="email"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            class="input"
+            placeholder="Min. 8 characters"
+            autocomplete="new-password"
+            required
+            minlength="8"
+          />
+          <span class="form-hint">At least 8 characters.</span>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full btn-lg" id="submit-btn">
+          Create account
+        </button>
+      </form>
+
+      <div class="divider-text">or</div>
+
+      <p class="text-muted" style="text-align:center; font-size:0.85rem;">
+        Already have an account?
+        <a href="/login">Sign in</a>
+      </p>
+
+    </div>
+  </div>
+
+  <script type="module">
+    import { register, guestGuard } from '/js/api.js';
+
+    guestGuard();
+
+    const form      = document.getElementById('register-form');
+    const errorEl   = document.getElementById('register-error');
+    const submitBtn = document.getElementById('submit-btn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.textContent = '';
+      errorEl.classList.remove('show');
+
+      const username = form.username.value.trim();
+      const email    = form.email.value.trim();
+      const password = form.password.value;
+
+      if (!username || !email || !password) {
+        showError('Please fill in all fields.');
+        return;
+      }
+      if (password.length < 8) {
+        showError('Password must be at least 8 characters.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner"></span> Creating account…';
+
+      try {
+        await register(username, email, password);
+        window.location.href = '/dashboard';
+      } catch (err) {
+        showError(err.message || 'Registration failed. Please try again.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create account';
+      }
+    });
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.classList.add('show');
+    }
+  </script>
+</body>
+</html>

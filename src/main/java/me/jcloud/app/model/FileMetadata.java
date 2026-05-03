@@ -16,7 +16,7 @@ import java.util.UUID;
 @Table(name = "file_metadata", uniqueConstraints = {
     @UniqueConstraint(columnNames = {"bucket_id", "path"})
 })
-public class FileMetadata {
+public class FileMetadata extends BaseAuditEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

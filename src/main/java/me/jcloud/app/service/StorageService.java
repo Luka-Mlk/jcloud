@@ -10,7 +10,10 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.io.InputStream;
 import java.nio.file.*;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class StorageService {
@@ -25,6 +28,19 @@ public class StorageService {
         }
 
         return Files.copy(inputStream, root.resolve(fileId.toString()), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    public List<Integer> getExistingPartNumbers(UUID uploadId) throws IOException {
+        Path uploadDir = Paths.get(storageLocation).resolve("uploads").resolve(uploadId.toString());
+        if (!Files.exists(uploadDir)) return Collections.emptyList();
+
+        try (java.util.stream.Stream<Path> stream = Files.list(uploadDir)) {
+            return stream
+                    .map(p -> p.getFileName().toString())
+                    .filter(name -> name.matches("\\d+")) // Only number filenames
+                    .map(Integer::parseInt)
+                    .collect(Collectors.toList());
+        }
     }
 
     public void savePart(UUID uploadId, int partNumber, InputStream inputStream) throws IOException {
