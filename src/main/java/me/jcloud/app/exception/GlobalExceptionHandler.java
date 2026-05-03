@@ -1,14 +1,13 @@
 package me.jcloud.app.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import me.jcloud.app.dto.ErrorResponse;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.ModelAndView;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -16,17 +15,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler({
-            ResourceNotFoundException.class,
-            ConflictException.class,
-            UnauthorizedException.class,
-            BaseException.class
-    })
-    public ResponseEntity<ErrorResponse> handleBaseException(BaseException ex, HttpServletRequest request) {
+    @ExceptionHandler(BaseException.class)
+    public Object handleBaseException(BaseException ex, HttpServletRequest request) {
+        if (isHtmlRequest(request)) {
+            return new ModelAndView("error/" + ex.getStatus().value(), "message", ex.getMessage());
+        }
+
         ErrorResponse errorResponse = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                .timestamp(now())
                 .status(ex.getStatus().value())
                 .error(ex.getStatus().getReasonPhrase())
                 .message(ex.getMessage())
@@ -36,46 +35,42 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidationExceptions(MethodArgumentNotValidException ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         Map<String, String> details = new HashMap<>();
-        ex.getBindingResult().getAllErrors().forEach((error) -> {
-            String fieldName = ((FieldError) error).getField();
-            String errorMessage = error.getDefaultMessage();
-            details.put(fieldName, errorMessage);
-        });
+        ex.getBindingResult().getFieldErrors().forEach(err ->
+                details.put(err.getField(), err.getDefaultMessage()));
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+        return ResponseEntity.badRequest().body(ErrorResponse.builder()
+                .timestamp(now())
+                .status(400)
                 .message("Validation failed")
-                .path(request.getRequestURI())
                 .details(details)
-                .build();
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
-    }
-
-    @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex, HttpServletRequest request) {
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                .status(ex.getStatusCode().value())
-                .error(((HttpStatus) ex.getStatusCode()).getReasonPhrase())
-                .message(ex.getReason())
                 .path(request.getRequestURI())
-                .build();
-        return new ResponseEntity<>(errorResponse, ex.getStatusCode());
+                .build());
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGlobalException(Exception ex, HttpServletRequest request) {
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-                .error(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase())
-                .message(ex.getMessage())
+    public Object handleUnexpected(Exception ex, HttpServletRequest request) {
+        log.error("Unhandled exception at {}: ", request.getRequestURI(), ex);
+
+        if (isHtmlRequest(request)) {
+            return new ModelAndView("error/500");
+        }
+
+        return ResponseEntity.internalServerError().body(ErrorResponse.builder()
+                .timestamp(now())
+                .status(500)
+                .message("An internal error occurred. Please try again later.")
                 .path(request.getRequestURI())
-                .build();
-        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+                .build());
+    }
+
+    private boolean isHtmlRequest(HttpServletRequest request) {
+        String accept = request.getHeader("Accept");
+        return accept != null && accept.contains("text/html");
+    }
+
+    private String now() {
+        return LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
     }
 }

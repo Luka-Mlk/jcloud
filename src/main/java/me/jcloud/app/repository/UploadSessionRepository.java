@@ -14,4 +14,5 @@ public interface UploadSessionRepository extends JpaRepository<UploadSession, UU
     Optional<UploadSession> findByUserIdAndBucketAndPathAndStatus(
             UUID userId, Bucket bucket, String path, String status
     );
+    void deleteByBucketId(UUID bucketId);
 }
